@@ -95,6 +95,9 @@ public class LwjglRedirections {
         manager.redirect("Lorg/lwjgl/Sys;getTime()J", (obj, desc, type, args)
             -> System.nanoTime() / 1000000L);
 
+        // GlHeuristics#getMaxSupportedTextureSize (MC 26.2) probes a proxy
+        // texture's width here via GL33C.glGetTexLevelParameteri -> GL11C; routed
+        // to this GL11 redirect by the RedirectionManager's GLnnC -> GLnn fallback.
         manager.redirect("Lorg/lwjgl/opengl/GL11;glGetTexLevelParameteri(III)I",
                 (obj, desc, type, args) -> {
                     if ((int) args[2] == LwjglConfig.GL_TEXTURE_INTERNAL_FORMAT_CONST) {
@@ -214,6 +217,23 @@ public class LwjglRedirections {
             manager.redirect(STBImage.DESC, STBImageRedirection.INSTANCE);
         }
 
+        // MC 26.2's NativeLibrariesBootstrap.loadSTB() throws if
+        // stbi_failure_reason() returns anything non-null; the default String
+        // redirection hands back "" (non-null), so force null = "no STB error".
+        manager.redirect("Lorg/lwjgl/stb/STBImage;stbi_failure_reason()Ljava/lang/String;",
+                         DefaultRedirections.NULL);
+
+        // This is only needed because LwjglTransformer keeps org/lwjgl/Version
+        // intact (MC 26.2's NativeLibrariesBootstrap reads its real version);
+        // normally Version is stubbed and its <clinit> never runs. With the real
+        // <clinit> running, LWJGL 3.2.2 (MC 1.18.2) calls
+        // APIUtil.apiGetManifestValue(...).orElse("SNAPSHOT") - and APIUtil is
+        // still stubbed, so it returns null and the orElse NPEs. Hand back an
+        // empty Optional so the version string resolves to its "SNAPSHOT" default.
+        manager.redirect(
+            "Lorg/lwjgl/system/APIUtil;apiGetManifestValue(Ljava/lang/String;)Ljava/util/Optional;",
+            (obj, desc, type, args) -> java.util.Optional.empty());
+
         manager.redirect(MemASCIIRedirection.DESC,
                          MemASCIIRedirection.INSTANCE);
 
@@ -294,10 +314,18 @@ public class LwjglRedirections {
         // DynamicUniformStorage.<init>
         // GlDevice this.uniformOffsetAlignment = GL11.glGetInteger(35380);
         // division by zero, because the integer returned is 0
+        // (MC 26.2 reads this via GL33C.glGetInteger -> GL11C; routed here by the
+        // RedirectionManager's GLnnC -> GLnn fallback.)
         manager.redirect("Lorg/lwjgl/opengl/GL11;glGetInteger(I)I",
                 (obj, desc, type, args) -> {
                     if ((int) args[0] == LwjglConfig.GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT) {
                         return LwjglConfig.UNIFORM_OFFSET_ALIGNMENT;
+                    } else if ((int) args[0] == LwjglConfig.GL_MAX_COLOR_ATTACHMENTS) {
+                        // MC 26.2 DeviceLimits#maxColorAttachments; a render pass
+                        // with N color attachments fails if the device reports
+                        // fewer. Report the GL-spec minimum so single-attachment
+                        // GUI passes are accepted.
+                        return LwjglConfig.MAX_COLOR_ATTACHMENTS;
                     }
 
                     return 0;

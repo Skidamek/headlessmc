@@ -9,6 +9,9 @@ public class LwjglConfig {
     public static final int GL_TEXTURE_WIDTH = 4096;
     public static final int GL_TEXTURE_INTERNAL_FORMAT_CONST = 4099;
     public static final int GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT = 0x8A34;
+    // MC 26.2 GlHeuristics reads this into DeviceLimits#maxColorAttachments.
+    public static final int GL_MAX_COLOR_ATTACHMENTS = 0x8824;
+    public static final int MAX_COLOR_ATTACHMENTS = 8;
 
     public static final int GL_TEXTURE_INTERNAL_FORMAT = Integer.parseInt(
         System.getProperty(LwjglProperties.GL_TEXTURE_INTERNAL_FORMAT, "32856")); //RGBA8

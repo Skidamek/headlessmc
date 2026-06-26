@@ -27,8 +27,40 @@ import static org.objectweb.asm.Opcodes.*;
  * their body transformed as described above.
  */
 public class LwjglTransformer implements Transformer {
+    /**
+     * Pure-Java LWJGL info/config classes (no native code) that Minecraft reads
+     * directly from non-LWJGL code we don't transform. MC 26.2's
+     * {@code com.mojang.blaze3d.platform.NativeLibrariesBootstrap} queries
+     * {@code Configuration} (e.g. {@code SHARED_LIBRARY_EXTRACT_PATH}),
+     * {@code Platform#getArchitecture()} and {@code Version#getVersion()} while
+     * configuring the library path. If we wipe their {@code <clinit>}/method
+     * bodies those reads return {@code null} and the game crashes with an NPE
+     * before launching. Leave these classes (and their nested types, e.g.
+     * {@code Configuration$StateInit} / {@code Platform$Architecture}) intact so
+     * their static state initialises normally. They do not touch native code.
+     */
+    private static final String[] KEEP_INTACT = {
+        "org/lwjgl/system/Configuration",
+        "org/lwjgl/system/Platform",
+        "org/lwjgl/Version",
+    };
+
+    private static boolean shouldKeepIntact(String name) {
+        for (String keep : KEEP_INTACT) {
+            if (name.equals(keep) || name.startsWith(keep + "$")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     @Override
     public void transform(ClassNode cn) {
+        if (shouldKeepIntact(cn.name)) {
+            return;
+        }
+
         try {
             transformModule(cn);
         } catch (NoSuchFieldError ignored) {
